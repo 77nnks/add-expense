@@ -94,11 +94,44 @@ npm start
 npm run dev
 ```
 
-## デプロイ
+## デプロイ (Railway)
 
-### Render, Railway, Fly.ioなど
+### 1. Railwayプロジェクトの作成
 
-環境変数を設定し、ビルドコマンド `npm run build`、起動コマンド `npm start` を設定してください。
+1. [Railway](https://railway.app/) にログイン
+2. 「New Project」→「Deploy from GitHub repo」を選択
+3. このリポジトリを選択
+
+### 2. 環境変数の設定
+
+Railwayダッシュボードで以下の環境変数を設定:
+
+| 変数名 | 説明 |
+|--------|------|
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINEチャネルアクセストークン |
+| `LINE_CHANNEL_SECRET` | LINEチャネルシークレット |
+| `NOTION_API_KEY` | Notion APIキー |
+| `NOTION_DATABASE_ID` | NotionデータベースID |
+| `PORT` | `3000` (Railwayが自動設定する場合は不要) |
+
+### 3. デプロイ
+
+環境変数を設定後、自動的にデプロイが開始されます。
+
+### 4. Webhook URLの設定
+
+1. Railwayダッシュボードで「Settings」→「Networking」→「Generate Domain」
+2. 生成されたドメイン（例: `https://your-app.up.railway.app`）をコピー
+3. LINE Developersで Webhook URL を設定: `https://your-app.up.railway.app/webhook`
+4. 「Webhookの利用」をオンに設定
+
+### ヘルスチェック
+
+`/health` エンドポイントでアプリの稼働状況を確認できます。
+
+---
+
+## その他のデプロイ方法
 
 ### Docker
 

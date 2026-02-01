@@ -60,6 +60,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
       `📝 ${parsed.data.description}`,
       `💰 ${parsed.data.amount.toLocaleString()}円`,
       `📁 ${parsed.data.category}`,
+      `💳 ${parsed.data.paymentMethod}`,
     ].join('\n');
 
     await replyText(replyToken, response);

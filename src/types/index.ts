@@ -3,6 +3,7 @@ export interface ExpenseData {
   category: string;
   description: string;
   date: Date;
+  paymentMethod: string;
 }
 
 export interface ParsedMessage {
@@ -25,3 +26,14 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const PAYMENT_METHODS = [
+  '現金',
+  'QR決済',
+  'クレジットカード',
+  '電子マネー',
+  '銀行振込',
+  'その他',
+] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

@@ -15,8 +15,8 @@ export async function addExpenseToNotion(expense: ExpenseData): Promise<string> 
       database_id: config.notion.databaseId,
     },
     properties: {
-      // タイトル (説明)
-      Name: {
+      // 支出項目 (タイトル)
+      支出項目: {
         title: [
           {
             text: {
@@ -26,19 +26,25 @@ export async function addExpenseToNotion(expense: ExpenseData): Promise<string> 
         ],
       },
       // 金額
-      Amount: {
+      金額: {
         number: expense.amount,
       },
-      // カテゴリ
-      Category: {
+      // カテゴリー
+      カテゴリー: {
         select: {
           name: expense.category,
         },
       },
       // 日付
-      Date: {
+      日付: {
         date: {
           start: expense.date.toISOString().split('T')[0],
+        },
+      },
+      // 支出方法
+      支出方法: {
+        select: {
+          name: expense.paymentMethod,
         },
       },
     },
@@ -58,7 +64,7 @@ export async function getMonthlyTotal(): Promise<number> {
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
     filter: {
-      property: 'Date',
+      property: '日付',
       date: {
         on_or_after: startOfMonth.toISOString().split('T')[0],
         on_or_before: endOfMonth.toISOString().split('T')[0],
@@ -69,7 +75,7 @@ export async function getMonthlyTotal(): Promise<number> {
   let total = 0;
   for (const page of response.results) {
     if ('properties' in page) {
-      const amountProp = page.properties.Amount;
+      const amountProp = page.properties['金額'];
       if (
         amountProp &&
         amountProp.type === 'number' &&

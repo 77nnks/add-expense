@@ -1,9 +1,8 @@
 import {
   ParsedMessage,
-  EXPENSE_CATEGORIES,
-  ExpenseCategory,
-  PAYMENT_METHODS,
-  PaymentMethod,
+  DatabaseOptions,
+  CATEGORY_KEYWORDS,
+  PAYMENT_KEYWORDS,
 } from '../types';
 
 /**
@@ -15,7 +14,10 @@ import {
  * - "1500 食費 夕食"
  * - "コンビニ 300" (カテゴリ・支出方法を推測)
  */
-export function parseExpenseMessage(message: string): ParsedMessage {
+export function parseExpenseMessage(
+  message: string,
+  options: DatabaseOptions
+): ParsedMessage {
   const trimmedMessage = message.trim();
 
   if (!trimmedMessage) {
@@ -33,9 +35,9 @@ export function parseExpenseMessage(message: string): ParsedMessage {
     return { success: false, error: '有効な金額を入力してください' };
   }
 
-  // カテゴリを検出
-  let category: ExpenseCategory = 'その他';
-  for (const cat of EXPENSE_CATEGORIES) {
+  // カテゴリを検出 (NotionDBの選択肢から)
+  let category = options.categories[0] || 'その他';
+  for (const cat of options.categories) {
     if (trimmedMessage.includes(cat)) {
       category = cat;
       break;
@@ -43,13 +45,16 @@ export function parseExpenseMessage(message: string): ParsedMessage {
   }
 
   // キーワードからカテゴリを推測
-  if (category === 'その他') {
-    category = inferCategory(trimmedMessage);
+  if (category === options.categories[0]) {
+    const inferred = inferCategory(trimmedMessage, options.categories);
+    if (inferred) {
+      category = inferred;
+    }
   }
 
-  // 支出方法を検出
-  let paymentMethod: PaymentMethod = '現金';
-  for (const method of PAYMENT_METHODS) {
+  // 支出方法を検出 (NotionDBの選択肢から)
+  let paymentMethod = options.paymentMethods[0] || '現金';
+  for (const method of options.paymentMethods) {
     if (trimmedMessage.includes(method)) {
       paymentMethod = method;
       break;
@@ -57,8 +62,11 @@ export function parseExpenseMessage(message: string): ParsedMessage {
   }
 
   // キーワードから支出方法を推測
-  if (paymentMethod === '現金' && !trimmedMessage.includes('現金')) {
-    paymentMethod = inferPaymentMethod(trimmedMessage);
+  if (paymentMethod === options.paymentMethods[0] && !trimmedMessage.includes(paymentMethod)) {
+    const inferred = inferPaymentMethod(trimmedMessage, options.paymentMethods);
+    if (inferred) {
+      paymentMethod = inferred;
+    }
   }
 
   // 説明を抽出 (金額、カテゴリ、支出方法を除いた残り)
@@ -88,77 +96,43 @@ export function parseExpenseMessage(message: string): ParsedMessage {
 /**
  * キーワードからカテゴリを推測
  */
-function inferCategory(message: string): ExpenseCategory {
-  const categoryKeywords: Record<ExpenseCategory, string[]> = {
-    食費: [
-      'ランチ',
-      '夕食',
-      '朝食',
-      'コンビニ',
-      'スーパー',
-      '弁当',
-      'カフェ',
-      'コーヒー',
-      '外食',
-      'レストラン',
-    ],
-    交通費: ['電車', 'バス', 'タクシー', 'ガソリン', '定期', '駐車'],
-    日用品: [
-      '洗剤',
-      'シャンプー',
-      'ティッシュ',
-      'トイレットペーパー',
-      '100均',
-      'ドラッグストア',
-    ],
-    娯楽: ['映画', 'ゲーム', '本', '漫画', 'ライブ', 'カラオケ', '飲み会'],
-    医療: ['病院', '薬局', '薬', '診察', '歯医者'],
-    衣服: ['服', '靴', 'アクセサリー', 'ユニクロ', 'GU'],
-    通信費: ['スマホ', '携帯', 'WiFi', 'インターネット'],
-    光熱費: ['電気', 'ガス', '水道'],
-    家賃: ['家賃', '賃貸', 'マンション'],
-    その他: [],
-  };
-
-  for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+function inferCategory(message: string, availableCategories: string[]): string | null {
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    // このカテゴリがNotionDBに存在するか確認
+    if (!availableCategories.includes(cat)) {
+      continue;
+    }
     for (const keyword of keywords) {
       if (message.includes(keyword)) {
-        return cat as ExpenseCategory;
+        return cat;
       }
     }
   }
-
-  return 'その他';
+  return null;
 }
 
 /**
  * キーワードから支出方法を推測
  */
-function inferPaymentMethod(message: string): PaymentMethod {
-  const paymentKeywords: Record<PaymentMethod, string[]> = {
-    現金: [],
-    QR決済: ['PayPay', 'paypay', 'ペイペイ', 'LINE Pay', 'メルペイ', 'd払い', '楽天ペイ'],
-    クレジットカード: ['カード', 'クレカ', 'VISA', 'Master', 'JCB'],
-    電子マネー: ['Suica', 'PASMO', 'nanaco', 'WAON', 'iD', 'QuicPay'],
-    銀行振込: ['振込', '振り込み', '口座'],
-    その他: [],
-  };
-
-  for (const [method, keywords] of Object.entries(paymentKeywords)) {
+function inferPaymentMethod(message: string, availableMethods: string[]): string | null {
+  for (const [method, keywords] of Object.entries(PAYMENT_KEYWORDS)) {
+    // この支出方法がNotionDBに存在するか確認
+    if (!availableMethods.includes(method)) {
+      continue;
+    }
     for (const keyword of keywords) {
       if (message.toLowerCase().includes(keyword.toLowerCase())) {
-        return method as PaymentMethod;
+        return method;
       }
     }
   }
-
-  return '現金';
+  return null;
 }
 
 /**
  * ヘルプメッセージを生成
  */
-export function getHelpMessage(): string {
+export function getHelpMessage(options: DatabaseOptions): string {
   return `【家計簿の使い方】
 
 金額・カテゴリ・支出方法を入力してください。
@@ -169,10 +143,12 @@ export function getHelpMessage(): string {
 ・1500 コンビニ PayPay
 
 📁 カテゴリ一覧:
-${EXPENSE_CATEGORIES.join('、')}
+${options.categories.join('、')}
 
 💳 支出方法:
-${PAYMENT_METHODS.join('、')}
+${options.paymentMethods.join('、')}
 
-💡 省略すると自動推測します`;
+💡 省略すると自動推測します
+
+🔄 「更新」で選択肢を再読み込み`;
 }

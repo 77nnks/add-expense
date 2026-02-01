@@ -12,28 +12,46 @@ export interface ParsedMessage {
   error?: string;
 }
 
-export const EXPENSE_CATEGORIES = [
-  '食費',
-  '交通費',
-  '日用品',
-  '娯楽',
-  '医療',
-  '衣服',
-  '通信費',
-  '光熱費',
-  '家賃',
-  'その他',
-] as const;
+export interface DatabaseOptions {
+  categories: string[];
+  paymentMethods: string[];
+}
 
-export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+// キーワードからカテゴリを推測するためのマッピング
+export const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  食費: [
+    'ランチ',
+    '夕食',
+    '朝食',
+    'コンビニ',
+    'スーパー',
+    '弁当',
+    'カフェ',
+    'コーヒー',
+    '外食',
+    'レストラン',
+  ],
+  交通費: ['電車', 'バス', 'タクシー', 'ガソリン', '定期', '駐車'],
+  日用品: [
+    '洗剤',
+    'シャンプー',
+    'ティッシュ',
+    'トイレットペーパー',
+    '100均',
+    'ドラッグストア',
+  ],
+  娯楽: ['映画', 'ゲーム', '本', '漫画', 'ライブ', 'カラオケ', '飲み会'],
+  医療: ['病院', '薬局', '薬', '診察', '歯医者'],
+  衣服: ['服', '靴', 'アクセサリー', 'ユニクロ', 'GU'],
+  通信費: ['スマホ', '携帯', 'WiFi', 'インターネット'],
+  光熱費: ['電気', 'ガス', '水道'],
+  家賃: ['家賃', '賃貸', 'マンション'],
+};
 
-export const PAYMENT_METHODS = [
-  '現金',
-  'QR決済',
-  'クレジットカード',
-  '電子マネー',
-  '銀行振込',
-  'その他',
-] as const;
-
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+// キーワードから支出方法を推測するためのマッピング
+export const PAYMENT_KEYWORDS: Record<string, string[]> = {
+  QR決済: ['PayPay', 'paypay', 'ペイペイ', 'LINE Pay', 'メルペイ', 'd払い', '楽天ペイ'],
+  クレジットカード: ['カード', 'クレカ', 'VISA', 'Master', 'JCB'],
+  電子マネー: ['Suica', 'PASMO', 'nanaco', 'WAON', 'iD', 'QuicPay'],
+  銀行振込: ['振込', '振り込み', '口座'],
+};

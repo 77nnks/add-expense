@@ -1,10 +1,62 @@
 import { Client } from '@notionhq/client';
 import { config } from '../config';
-import { ExpenseData } from '../types';
+import { ExpenseData, DatabaseOptions } from '../types';
 
 const notion = new Client({
   auth: config.notion.apiKey,
 });
+
+// 選択肢のキャッシュ
+let cachedOptions: DatabaseOptions | null = null;
+
+/**
+ * NotionデータベースからSelect項目の選択肢を取得
+ */
+export async function getDatabaseOptions(): Promise<DatabaseOptions> {
+  if (cachedOptions) {
+    return cachedOptions;
+  }
+
+  const response = await notion.databases.retrieve({
+    database_id: config.notion.databaseId,
+  });
+
+  const categories: string[] = [];
+  const paymentMethods: string[] = [];
+
+  if ('properties' in response) {
+    // カテゴリーの選択肢を取得
+    const categoryProp = response.properties['カテゴリー'];
+    if (categoryProp && categoryProp.type === 'select' && categoryProp.select.options) {
+      for (const option of categoryProp.select.options) {
+        categories.push(option.name);
+      }
+    }
+
+    // 支出方法の選択肢を取得
+    const paymentProp = response.properties['支出方法'];
+    if (paymentProp && paymentProp.type === 'select' && paymentProp.select.options) {
+      for (const option of paymentProp.select.options) {
+        paymentMethods.push(option.name);
+      }
+    }
+  }
+
+  cachedOptions = {
+    categories: categories.length > 0 ? categories : ['その他'],
+    paymentMethods: paymentMethods.length > 0 ? paymentMethods : ['現金'],
+  };
+
+  console.log('Loaded options from Notion:', cachedOptions);
+  return cachedOptions;
+}
+
+/**
+ * キャッシュをクリア（選択肢が更新された場合に使用）
+ */
+export function clearOptionsCache(): void {
+  cachedOptions = null;
+}
 
 /**
  * Notionデータベースに支出データを登録

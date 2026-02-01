@@ -1,7 +1,12 @@
 import { WebhookEvent, TextMessage, messagingApi } from '@line/bot-sdk';
 import { config } from '../config';
 import { parseExpenseMessage, getHelpMessage } from '../utils/messageParser';
-import { addExpenseToNotion, getMonthlyTotal } from '../services/notion';
+import {
+  addExpenseToNotion,
+  getMonthlyTotal,
+  getDatabaseOptions,
+  clearOptionsCache,
+} from '../services/notion';
 
 const client = new messagingApi.MessagingApiClient({
   channelAccessToken: config.line.channelAccessToken,
@@ -18,9 +23,35 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
   const { replyToken } = event;
   const userMessage = event.message.text;
 
+  // NotionDBから選択肢を取得
+  let options;
+  try {
+    options = await getDatabaseOptions();
+  } catch (error) {
+    console.error('Failed to get database options:', error);
+    await replyText(replyToken, 'Notionデータベースの取得に失敗しました。設定を確認してください。');
+    return;
+  }
+
   // ヘルプコマンド
   if (userMessage === 'ヘルプ' || userMessage === 'help' || userMessage === '?') {
-    await replyText(replyToken, getHelpMessage());
+    await replyText(replyToken, getHelpMessage(options));
+    return;
+  }
+
+  // 更新コマンド（選択肢のキャッシュをクリア）
+  if (userMessage === '更新' || userMessage === 'reload') {
+    clearOptionsCache();
+    try {
+      const newOptions = await getDatabaseOptions();
+      await replyText(
+        replyToken,
+        `🔄 選択肢を更新しました\n\n📁 カテゴリ:\n${newOptions.categories.join('、')}\n\n💳 支出方法:\n${newOptions.paymentMethods.join('、')}`
+      );
+    } catch (error) {
+      console.error('Failed to reload options:', error);
+      await replyText(replyToken, '選択肢の更新に失敗しました');
+    }
     return;
   }
 
@@ -41,7 +72,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
   }
 
   // 支出の登録
-  const parsed = parseExpenseMessage(userMessage);
+  const parsed = parseExpenseMessage(userMessage, options);
 
   if (!parsed.success || !parsed.data) {
     await replyText(

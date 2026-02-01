@@ -1,12 +1,13 @@
 import { WebhookEvent, TextMessage, messagingApi } from '@line/bot-sdk';
 import { config } from '../config';
-import { parseExpenseMessage, getHelpMessage } from '../utils/messageParser';
+import { getHelpMessage } from '../utils/messageParser';
 import {
   addExpenseToNotion,
   getMonthlyTotal,
   getDatabaseOptions,
   clearOptionsCache,
 } from '../services/notion';
+import { analyzeExpenseMessage } from '../services/openai';
 
 const client = new messagingApi.MessagingApiClient({
   channelAccessToken: config.line.channelAccessToken,
@@ -71,8 +72,8 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
-  // 支出の登録
-  const parsed = parseExpenseMessage(userMessage, options);
+  // AI分析で支出を解析
+  const parsed = await analyzeExpenseMessage(userMessage, options);
 
   if (!parsed.success || !parsed.data) {
     await replyText(

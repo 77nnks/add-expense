@@ -135,20 +135,19 @@ function inferPaymentMethod(message: string, availableMethods: string[]): string
 export function getHelpMessage(options: DatabaseOptions): string {
   return `【家計簿の使い方】
 
-金額・カテゴリ・支出方法を入力してください。
+自然な文章で支出を入力できます🤖
 
 📝 入力例:
-・食費 1000 ランチ 現金
-・交通費 500 電車 Suica
-・1500 コンビニ PayPay
+・マックで500円使った
+・電車代200円 Suicaで払った
+・今日のランチ800円
+・コンビニ 300 PayPay
 
-📁 カテゴリ一覧:
+📁 カテゴリ:
 ${options.categories.join('、')}
 
 💳 支出方法:
 ${options.paymentMethods.join('、')}
-
-💡 省略すると自動推測します
 
 🔄 「更新」で選択肢を再読み込み`;
 }

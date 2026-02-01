@@ -19,5 +19,8 @@ export const config = {
     apiKey: getEnvVar('NOTION_API_KEY'),
     databaseId: getEnvVar('NOTION_DATABASE_ID'),
   },
+  openai: {
+    apiKey: getEnvVar('OPENAI_API_KEY'),
+  },
   port: parseInt(process.env.PORT || '3000', 10),
 };

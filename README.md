@@ -4,19 +4,21 @@ LINEにメッセージを送信するだけで、Notionデータベースに支�
 
 ## 機能
 
-- 📝 LINEメッセージから支出を自動解析・登録
+- 🤖 **AI分析**（GPT-4o-mini）で自然な文章から支出を解析
 - 📁 カテゴリの自動推測（NotionDBの選択肢から動的取得）
 - 💳 支出方法の自動推測（NotionDBの選択肢から動的取得）
 - 📊 今月の支出合計を確認
-- 💬 シンプルな入力フォーマット
 - 🔄 NotionDBの選択肢変更を即時反映
 
 ## 対応フォーマット
 
+自然な文章で入力できます：
+
 ```
-食費 1000 ランチ 現金      → カテゴリ: 食費, 金額: 1000円, 支出方法: 現金
-交通費 500 Suica           → カテゴリ: 交通費, 金額: 500円, 支出方法: 電子マネー
-1500 コンビニ PayPay       → カテゴリ: 食費(自動推測), 金額: 1500円, 支出方法: QR決済
+マックで500円使った        → カテゴリ: 食費, 金額: 500円
+電車代200円 Suicaで払った  → カテゴリ: 交通費, 金額: 200円, 支出方法: 電子マネー
+今日のランチ800円          → カテゴリ: 食費, 金額: 800円
+コンビニ 300 PayPay        → カテゴリ: 食費, 金額: 300円, 支出方法: QR決済
 ```
 
 ## カテゴリ・支出方法
@@ -24,10 +26,15 @@ LINEにメッセージを送信するだけで、Notionデータベースに支�
 カテゴリと支出方法は **NotionDBのSelect項目から自動取得** されます。
 Notionでカテゴリー・支出方法の選択肢を追加すると、アプリに自動反映されます。
 
-### 自動推測キーワード
+## AI分析について
 
-| 種類 | キーワード例 |
-|------|-------------|
+OpenAI GPT-4o-mini を使用して自然言語を解析します。
+
+| 項目 | 内容 |
+|------|------|
+| モデル | GPT-4o-mini |
+| コスト | 約$0.0001/リクエスト（月300回で約5円） |
+| 精度 | 文脈を理解して適切なカテゴリ・支出方法を推測 |
 | 食費 | ランチ、コンビニ、カフェ、外食 |
 | 交通費 | 電車、バス、タクシー、ガソリン |
 | QR決済 | PayPay, LINE Pay, メルペイ |
@@ -81,6 +88,7 @@ LINE_CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
 LINE_CHANNEL_SECRET=your_line_channel_secret
 NOTION_API_KEY=your_notion_api_key
 NOTION_DATABASE_ID=your_notion_database_id
+OPENAI_API_KEY=your_openai_api_key
 PORT=3000
 ```
 
@@ -118,6 +126,7 @@ Railwayダッシュボードで以下の環境変数を設定:
 | `LINE_CHANNEL_SECRET` | LINEチャネルシークレット |
 | `NOTION_API_KEY` | Notion APIキー |
 | `NOTION_DATABASE_ID` | NotionデータベースID |
+| `OPENAI_API_KEY` | OpenAI APIキー |
 | `PORT` | `3000` (Railwayが自動設定する場合は不要) |
 
 ### 3. デプロイ
@@ -157,3 +166,4 @@ CMD ["npm", "start"]
 - Express
 - LINE Messaging API
 - Notion API
+- OpenAI API (GPT-4o-mini)

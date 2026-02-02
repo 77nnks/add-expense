@@ -8,6 +8,7 @@ import {
   clearOptionsCache,
 } from '../services/notion';
 import { analyzeExpenseMessage } from '../services/openai';
+import { ExpenseData } from '../types';
 
 const client = new messagingApi.MessagingApiClient({
   channelAccessToken: config.line.channelAccessToken,
@@ -72,34 +73,63 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
-  // AI分析で支出を解析
-  const parsed = await analyzeExpenseMessage(userMessage, options);
+  // AI分析で支出を解析（複数対応）
+  const result = await analyzeExpenseMessage(userMessage, options);
 
-  if (!parsed.success || !parsed.data) {
+  if (!result.success || !result.expenses || result.expenses.length === 0) {
     await replyText(
       replyToken,
-      `${parsed.error}\n\n「ヘルプ」と入力すると使い方を確認できます`
+      `${result.error}\n\n「ヘルプ」と入力すると使い方を確認できます`
     );
     return;
   }
 
   try {
-    await addExpenseToNotion(parsed.data);
+    // 複数の支出を登録
+    const registeredExpenses: ExpenseData[] = [];
+    for (const expense of result.expenses) {
+      await addExpenseToNotion(expense);
+      registeredExpenses.push(expense);
+    }
 
-    const response = [
-      '✅ 登録しました',
-      '',
-      `📝 ${parsed.data.description}`,
-      `💰 ${parsed.data.amount.toLocaleString()}円`,
-      `📁 ${parsed.data.category}`,
-      `💳 ${parsed.data.paymentMethod}`,
-    ].join('\n');
-
+    // 登録結果のメッセージを作成
+    const response = buildResponseMessage(registeredExpenses);
     await replyText(replyToken, response);
   } catch (error) {
     console.error('Failed to add expense to Notion:', error);
     await replyText(replyToken, 'Notionへの登録に失敗しました。設定を確認してください。');
   }
+}
+
+/**
+ * 登録結果のメッセージを作成
+ */
+function buildResponseMessage(expenses: ExpenseData[]): string {
+  if (expenses.length === 1) {
+    const e = expenses[0];
+    return [
+      '✅ 登録しました',
+      '',
+      `📝 ${e.description}`,
+      `💰 ${e.amount.toLocaleString()}円`,
+      `📁 ${e.category}`,
+      `💳 ${e.paymentMethod}`,
+    ].join('\n');
+  }
+
+  // 複数の支出の場合
+  const lines = [`✅ ${expenses.length}件登録しました`, ''];
+
+  let total = 0;
+  for (const e of expenses) {
+    lines.push(`・${e.description}: ${e.amount.toLocaleString()}円 (${e.category})`);
+    total += e.amount;
+  }
+
+  lines.push('');
+  lines.push(`💰 合計: ${total.toLocaleString()}円`);
+
+  return lines.join('\n');
 }
 
 /**

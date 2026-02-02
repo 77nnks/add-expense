@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-LINE to Notion 家計簿アプリ - LINEメッセージから支出をAI（GPT-4o-mini）で自動解析してNotionデータベースに登録するWebhookサーバー
+LINE to Notion 家計簿アプリ - LINEメッセージやレシート画像から支出をAIで自動解析してNotionデータベースに登録するWebhookサーバー
 
 ## 技術スタック
 
@@ -12,9 +12,9 @@ LINE to Notion 家計簿アプリ - LINEメッセージから支出をAI（GPT-4
 - **言語**: TypeScript
 - **フレームワーク**: Express
 - **外部API**:
-  - LINE Messaging API (Webhook、リッチメニュー)
+  - LINE Messaging API (Webhook、リッチメニュー、画像取得)
   - Notion API (データベース操作、選択肢取得)
-  - OpenAI API (GPT-4o-mini による自然言語解析)
+  - OpenAI API (GPT-4o-mini: テキスト解析、GPT-4o: レシート画像解析)
 
 ## ディレクトリ構成
 
@@ -79,7 +79,8 @@ npm run delete:richmenu # リッチメニュー削除
 | `ヘルプ` / `help` / `?` | 使い方を表示 |
 | `集計` / `今月` | 今月の支出合計を表示 |
 | `更新` / `reload` | Notion選択肢を再取得 |
-| その他のメッセージ | AI解析して支出登録 |
+| その他のメッセージ | AI解析して支出登録（複数対応） |
+| 画像送信 | レシート画像をAI解析して支出登録 |
 
 ## リッチメニュー
 
@@ -95,7 +96,11 @@ LINE App → LINE Platform → Webhook → Express Server
                                          ↓
                                     Notion API (選択肢取得)
                                          ↓
-                                    OpenAI API (自然言語解析)
+                          ┌─────────────────────────────────┐
+                          │  テキスト → GPT-4o-mini (解析)   │
+                          │  画像 → LINE API (画像取得)     │
+                          │        → GPT-4o Vision (解析)  │
+                          └─────────────────────────────────┘
                                          ↓
                                     Notion API (支出登録)
                                          ↓

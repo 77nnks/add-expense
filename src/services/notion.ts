@@ -106,20 +106,36 @@ export async function addExpenseToNotion(expense: ExpenseData): Promise<string> 
 }
 
 /**
+ * 日本時間の現在日時を取得
+ */
+function getJSTDate(): Date {
+  const now = new Date();
+  // UTC+9時間で日本時間に変換
+  return new Date(now.getTime() + 9 * 60 * 60 * 1000);
+}
+
+/**
  * 今月の支出合計を取得
  */
 export async function getMonthlyTotal(): Promise<number> {
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const jstNow = getJSTDate();
+  const year = jstNow.getUTCFullYear();
+  const month = jstNow.getUTCMonth();
+
+  // 今月の開始日と終了日（YYYY-MM-DD形式）
+  const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  console.log(`Filtering: ${startOfMonth} to ${endOfMonth}`);
 
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
     filter: {
       property: '日付',
       date: {
-        on_or_after: startOfMonth.toISOString().split('T')[0],
-        on_or_before: endOfMonth.toISOString().split('T')[0],
+        on_or_after: startOfMonth,
+        on_or_before: endOfMonth,
       },
     },
   });

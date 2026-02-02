@@ -6,6 +6,10 @@ import {
   getMonthlyTotal,
   getDatabaseOptions,
   clearOptionsCache,
+  setUserLastExpense,
+  getUserLastExpense,
+  updateExpense,
+  deleteExpense,
 } from '../services/notion';
 import { analyzeExpenseMessage, analyzeReceiptImage } from '../services/openai';
 import { ExpenseData, DatabaseOptions } from '../types';
@@ -27,6 +31,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
   }
 
   const { replyToken } = event;
+  const userId = 'userId' in event.source ? event.source.userId : undefined;
 
   // NotionDBから選択肢を取得
   let options: DatabaseOptions;
@@ -40,7 +45,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
 
   // 画像メッセージの処理
   if (event.message.type === 'image') {
-    await handleImageMessage(event.message.id, replyToken, options);
+    await handleImageMessage(event.message.id, replyToken, options, userId);
     return;
   }
 
@@ -89,6 +94,18 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
+  // 取消・削除コマンド
+  if (userMessage === '取消' || userMessage === '削除') {
+    await handleDeleteCommand(replyToken, userId);
+    return;
+  }
+
+  // 修正コマンド
+  if (userMessage.startsWith('修正')) {
+    await handleModifyCommand(userMessage, replyToken, options, userId);
+    return;
+  }
+
   // AI分析で支出を解析（複数対応）
   const result = await analyzeExpenseMessage(userMessage, options);
 
@@ -100,7 +117,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
-  await registerExpenses(result.expenses, replyToken);
+  await registerExpenses(result.expenses, replyToken, userId);
 }
 
 /**
@@ -109,7 +126,8 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
 async function handleImageMessage(
   messageId: string,
   replyToken: string,
-  options: DatabaseOptions
+  options: DatabaseOptions,
+  userId?: string
 ): Promise<void> {
   try {
     // LINE APIから画像を取得
@@ -134,7 +152,7 @@ async function handleImageMessage(
       return;
     }
 
-    await registerExpenses(result.expenses, replyToken);
+    await registerExpenses(result.expenses, replyToken, userId);
   } catch (error) {
     console.error('Failed to process image:', error);
     await replyText(replyToken, '画像の処理に失敗しました。もう一度お試しください。');
@@ -146,13 +164,22 @@ async function handleImageMessage(
  */
 async function registerExpenses(
   expenses: ExpenseData[],
-  replyToken: string
+  replyToken: string,
+  userId?: string
 ): Promise<void> {
   try {
     const registeredExpenses: ExpenseData[] = [];
+    const pageIds: string[] = [];
+
     for (const expense of expenses) {
-      await addExpenseToNotion(expense);
+      const pageId = await addExpenseToNotion(expense);
       registeredExpenses.push(expense);
+      pageIds.push(pageId);
+    }
+
+    // ユーザーの直近の登録を保存
+    if (userId) {
+      setUserLastExpense(userId, pageIds);
     }
 
     const response = buildResponseMessage(registeredExpenses);
@@ -160,6 +187,142 @@ async function registerExpenses(
   } catch (error) {
     console.error('Failed to add expense to Notion:', error);
     await replyText(replyToken, 'Notionへの登録に失敗しました。設定を確認してください。');
+  }
+}
+
+/**
+ * 削除コマンドを処理
+ */
+async function handleDeleteCommand(
+  replyToken: string,
+  userId?: string
+): Promise<void> {
+  if (!userId) {
+    await replyText(replyToken, '削除できません。ユーザー情報が取得できませんでした。');
+    return;
+  }
+
+  const pageIds = getUserLastExpense(userId);
+  if (!pageIds || pageIds.length === 0) {
+    await replyText(replyToken, '削除する支出がありません。');
+    return;
+  }
+
+  try {
+    for (const pageId of pageIds) {
+      await deleteExpense(pageId);
+    }
+    setUserLastExpense(userId, []); // 削除後はクリア
+
+    const countText = pageIds.length > 1 ? `${pageIds.length}件の` : '';
+    await replyText(replyToken, `🗑️ ${countText}直近の登録を削除しました`);
+  } catch (error) {
+    console.error('Failed to delete expense:', error);
+    await replyText(replyToken, '削除に失敗しました。');
+  }
+}
+
+/**
+ * 修正コマンドを処理
+ * 書式: 修正 [項目] [値]
+ * 例: 修正 カテゴリー 交通費
+ */
+async function handleModifyCommand(
+  message: string,
+  replyToken: string,
+  options: DatabaseOptions,
+  userId?: string
+): Promise<void> {
+  if (!userId) {
+    await replyText(replyToken, '修正できません。ユーザー情報が取得できませんでした。');
+    return;
+  }
+
+  const pageIds = getUserLastExpense(userId);
+  if (!pageIds || pageIds.length === 0) {
+    await replyText(replyToken, '修正する支出がありません。');
+    return;
+  }
+
+  // コマンドをパース: "修正 項目 値"
+  const parts = message.split(/\s+/);
+  if (parts.length < 3) {
+    await replyText(
+      replyToken,
+      '修正の書式: 修正 [項目] [値]\n\n' +
+        '項目:\n' +
+        '・カテゴリー\n' +
+        '・支出方法\n' +
+        '・金額\n' +
+        '・項目（説明）\n\n' +
+        '例: 修正 カテゴリー 交通費'
+    );
+    return;
+  }
+
+  const field = parts[1];
+  const value = parts.slice(2).join(' ');
+
+  try {
+    const updates: Partial<ExpenseData> = {};
+
+    switch (field) {
+      case 'カテゴリー':
+      case 'カテゴリ':
+        if (!options.categories.includes(value)) {
+          await replyText(
+            replyToken,
+            `「${value}」は無効なカテゴリーです。\n\n利用可能: ${options.categories.join('、')}`
+          );
+          return;
+        }
+        updates.category = value;
+        break;
+
+      case '支出方法':
+      case '支払方法':
+        if (!options.paymentMethods.includes(value)) {
+          await replyText(
+            replyToken,
+            `「${value}」は無効な支出方法です。\n\n利用可能: ${options.paymentMethods.join('、')}`
+          );
+          return;
+        }
+        updates.paymentMethod = value;
+        break;
+
+      case '金額':
+        const amount = parseInt(value.replace(/[,円]/g, ''), 10);
+        if (isNaN(amount) || amount <= 0) {
+          await replyText(replyToken, '金額は正の数値で入力してください。');
+          return;
+        }
+        updates.amount = amount;
+        break;
+
+      case '項目':
+      case '説明':
+        updates.description = value;
+        break;
+
+      default:
+        await replyText(
+          replyToken,
+          `「${field}」は修正できない項目です。\n\n修正可能: カテゴリー、支出方法、金額、項目`
+        );
+        return;
+    }
+
+    // 全ての直近登録を更新
+    for (const pageId of pageIds) {
+      await updateExpense(pageId, updates);
+    }
+
+    const countText = pageIds.length > 1 ? `${pageIds.length}件の` : '';
+    await replyText(replyToken, `✏️ ${countText}${field}を「${value}」に修正しました`);
+  } catch (error) {
+    console.error('Failed to update expense:', error);
+    await replyText(replyToken, '修正に失敗しました。');
   }
 }
 

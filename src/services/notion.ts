@@ -9,6 +9,9 @@ const notion = new Client({
 // 選択肢のキャッシュ
 let cachedOptions: DatabaseOptions | null = null;
 
+// ユーザーごとの直近の登録ページIDを保持（メモリ内）
+const userLastExpense: Map<string, string[]> = new Map();
+
 /**
  * NotionデータベースからSelect項目の選択肢を取得
  */
@@ -160,4 +163,68 @@ export async function getMonthlyTotal(): Promise<number> {
   }
 
   return total;
+}
+
+/**
+ * ユーザーの直近の登録ページIDを保存
+ */
+export function setUserLastExpense(userId: string, pageIds: string[]): void {
+  userLastExpense.set(userId, pageIds);
+}
+
+/**
+ * ユーザーの直近の登録ページIDを取得
+ */
+export function getUserLastExpense(userId: string): string[] | undefined {
+  return userLastExpense.get(userId);
+}
+
+/**
+ * 支出データを更新
+ */
+export async function updateExpense(
+  pageId: string,
+  updates: Partial<ExpenseData>
+): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const properties: Record<string, any> = {};
+
+  if (updates.description !== undefined) {
+    properties['支出項目'] = {
+      title: [{ text: { content: updates.description } }],
+    };
+  }
+
+  if (updates.amount !== undefined) {
+    properties['金額'] = { number: updates.amount };
+  }
+
+  if (updates.category !== undefined) {
+    properties['カテゴリー'] = { select: { name: updates.category } };
+  }
+
+  if (updates.paymentMethod !== undefined) {
+    properties['支出方法'] = { select: { name: updates.paymentMethod } };
+  }
+
+  if (updates.date !== undefined) {
+    properties['日付'] = {
+      date: { start: updates.date.toISOString().split('T')[0] },
+    };
+  }
+
+  await notion.pages.update({
+    page_id: pageId,
+    properties,
+  });
+}
+
+/**
+ * 支出データを削除（アーカイブ）
+ */
+export async function deleteExpense(pageId: string): Promise<void> {
+  await notion.pages.update({
+    page_id: pageId,
+    archived: true,
+  });
 }

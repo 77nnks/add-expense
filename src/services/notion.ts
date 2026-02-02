@@ -25,8 +25,12 @@ export async function getDatabaseOptions(): Promise<DatabaseOptions> {
   const paymentMethods: string[] = [];
 
   if ('properties' in response) {
+    // デバッグ: 全プロパティ名を出力
+    console.log('Database properties:', Object.keys(response.properties));
+
     // カテゴリーの選択肢を取得
     const categoryProp = response.properties['カテゴリー'];
+    console.log('カテゴリー property:', JSON.stringify(categoryProp, null, 2));
     if (categoryProp && categoryProp.type === 'select' && categoryProp.select.options) {
       for (const option of categoryProp.select.options) {
         categories.push(option.name);
@@ -35,6 +39,7 @@ export async function getDatabaseOptions(): Promise<DatabaseOptions> {
 
     // 支出方法の選択肢を取得
     const paymentProp = response.properties['支出方法'];
+    console.log('支出方法 property:', JSON.stringify(paymentProp, null, 2));
     if (paymentProp && paymentProp.type === 'select' && paymentProp.select.options) {
       for (const option of paymentProp.select.options) {
         paymentMethods.push(option.name);

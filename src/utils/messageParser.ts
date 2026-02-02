@@ -142,6 +142,14 @@ export function getHelpMessage(options: DatabaseOptions): string {
 ・電車代200円 Suicaで払った
 ・今日のランチ800円
 ・コンビニ 300 PayPay
+・📷 レシート画像を送信
+
+✏️ 修正コマンド:
+・修正 カテゴリー 交通費
+・修正 金額 500
+・修正 支出方法 現金
+
+🗑️ 「取消」で直近の登録を削除
 
 📁 カテゴリ:
 ${options.categories.join('、')}

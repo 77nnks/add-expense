@@ -4,7 +4,7 @@
 
 ## プロジェクト概要
 
-LINE to Notion 家計簿アプリ - LINEメッセージから支出を自動解析してNotionデータベースに登録するWebhookサーバー
+LINE to Notion 家計簿アプリ - LINEメッセージから支出をAI（GPT-4o-mini）で自動解析してNotionデータベースに登録するWebhookサーバー
 
 ## 技術スタック
 
@@ -12,8 +12,8 @@ LINE to Notion 家計簿アプリ - LINEメッセージから支出を自動解�
 - **言語**: TypeScript
 - **フレームワーク**: Express
 - **外部API**:
-  - LINE Messaging API (Webhook)
-  - Notion API (データベース操作)
+  - LINE Messaging API (Webhook、リッチメニュー)
+  - Notion API (データベース操作、選択肢取得)
   - OpenAI API (GPT-4o-mini による自然言語解析)
 
 ## ディレクトリ構成
@@ -66,18 +66,38 @@ npm run delete:richmenu # リッチメニュー削除
 |-------------|--------|------|
 | 支出項目 | Title | 支出の説明 |
 | 金額 | Number | 金額 |
-| カテゴリー | Select | 食費、交通費など |
+| カテゴリー | Select | 食費、交通費など（選択肢はNotion側で設定） |
 | 日付 | Date | 支出日 |
-| 支出方法 | Select | 現金、QR決済など |
+| 支出方法 | Select | 現金、QR決済など（選択肢はNotion側で設定） |
+
+**重要**: カテゴリー・支出方法の選択肢はNotionデータベースで事前に追加する必要がある
+
+## LINEコマンド
+
+| コマンド | 説明 |
+|----------|------|
+| `ヘルプ` / `help` / `?` | 使い方を表示 |
+| `集計` / `今月` | 今月の支出合計を表示 |
+| `更新` / `reload` | Notion選択肢を再取得 |
+| その他のメッセージ | AI解析して支出登録 |
+
+## リッチメニュー
+
+3ボタン構成（2500x843px）:
+- ヘルプ: 使い方表示
+- 集計: 今月の合計
+- 更新: 選択肢再読み込み
 
 ## アーキテクチャ
 
 ```
 LINE App → LINE Platform → Webhook → Express Server
                                          ↓
-                                    OpenAI API (解析)
+                                    Notion API (選択肢取得)
                                          ↓
-                                    Notion API (登録)
+                                    OpenAI API (自然言語解析)
+                                         ↓
+                                    Notion API (支出登録)
                                          ↓
                                     LINE Reply (結果通知)
 ```

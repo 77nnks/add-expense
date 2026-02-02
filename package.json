@@ -8,7 +8,9 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "setup:richmenu": "ts-node scripts/setup-richmenu.ts",
+    "delete:richmenu": "ts-node scripts/setup-richmenu.ts --delete"
   },
   "dependencies": {
     "@line/bot-sdk": "^9.4.0",

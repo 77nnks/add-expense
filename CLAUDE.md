@@ -28,17 +28,25 @@ src/
 │   └── openai.ts         # OpenAI API による解析
 ├── utils/messageParser.ts # ヘルプメッセージ生成
 └── types/index.ts        # 型定義
+
+scripts/
+└── setup-richmenu.ts     # リッチメニュー設定スクリプト
+
+assets/
+└── richmenu.png          # リッチメニュー画像 (2500x843px)
 ```
 
 ## コマンド
 
 ```bash
-npm install      # 依存関係インストール
-npm run build    # TypeScript ビルド
-npm start        # 本番起動 (dist/index.js)
-npm run dev      # 開発モード (ts-node)
-npm run typecheck # 型チェック
-npm run lint     # ESLint
+npm install           # 依存関係インストール
+npm run build         # TypeScript ビルド
+npm start             # 本番起動 (dist/index.js)
+npm run dev           # 開発モード (ts-node)
+npm run typecheck     # 型チェック
+npm run lint          # ESLint
+npm run setup:richmenu  # リッチメニュー作成・設定
+npm run delete:richmenu # リッチメニュー削除
 ```
 
 ## 環境変数

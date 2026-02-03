@@ -1,4 +1,4 @@
-import { WebhookEvent, TextMessage, messagingApi } from '@line/bot-sdk';
+import { WebhookEvent, TextMessage, QuickReply, messagingApi } from '@line/bot-sdk';
 import { config } from '../config';
 import { getHelpMessage } from '../utils/messageParser';
 import {
@@ -11,6 +11,9 @@ import {
   getUserLastExpense,
   updateExpense,
   deleteExpense,
+  getExpenseById,
+  getUserState,
+  setUserState,
 } from '../services/notion';
 import { analyzeExpenseMessage, analyzeReceiptImage } from '../services/openai';
 import { ExpenseData, DatabaseOptions } from '../types';
@@ -56,6 +59,53 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
   }
 
   const userMessage = event.message.text;
+
+  // ユーザーの操作状態をチェック
+  if (userId) {
+    const userState = getUserState(userId);
+    if (userState) {
+      // 操作キャンセル
+      if (userMessage === 'キャンセル') {
+        setUserState(userId, null);
+        await replyText(replyToken, '操作をキャンセルしました');
+        return;
+      }
+
+      // 削除確認待ち
+      if (userState.action === 'confirmDelete') {
+        if (userMessage === '取消を確定') {
+          await executeDelete(replyToken, userId);
+        } else {
+          setUserState(userId, null);
+          await replyText(replyToken, '取消をキャンセルしました');
+        }
+        return;
+      }
+
+      // 修正項目選択待ち
+      if (userState.action === 'waitingModifyField') {
+        const validFields = ['カテゴリー', '支出方法', '金額', '支出項目'];
+        if (validFields.includes(userMessage)) {
+          setUserState(userId, { action: 'waitingModifyValue', field: userMessage });
+          await replyTextWithQuickReply(
+            replyToken,
+            `${userMessage}の新しい値を入力してください`,
+            [{ type: 'action', action: { type: 'message', label: 'キャンセル', text: 'キャンセル' } }]
+          );
+        } else {
+          setUserState(userId, null);
+          await replyText(replyToken, '修正をキャンセルしました');
+        }
+        return;
+      }
+
+      // 修正値入力待ち
+      if (userState.action === 'waitingModifyValue' && userState.field) {
+        await executeModify(replyToken, userId, userState.field, userMessage, options);
+        return;
+      }
+    }
+  }
 
   // ヘルプコマンド
   if (userMessage === 'ヘルプ' || userMessage === 'help' || userMessage === '?') {
@@ -134,8 +184,8 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
   }
 
   // 修正コマンド
-  if (userMessage.startsWith('修正')) {
-    await handleModifyCommand(userMessage, replyToken, options, userId);
+  if (userMessage === '修正') {
+    await handleModifyCommand(replyToken, userId);
     return;
   }
 
@@ -224,7 +274,7 @@ async function registerExpenses(
 }
 
 /**
- * 削除コマンドを処理
+ * 削除コマンドを処理（確認ダイアログ表示）
  */
 async function handleDeleteCommand(
   replyToken: string,
@@ -242,10 +292,55 @@ async function handleDeleteCommand(
   }
 
   try {
+    // 直近の登録情報を取得して表示
+    const expenses: string[] = [];
+    for (const pageId of pageIds) {
+      const expense = await getExpenseById(pageId);
+      if (expense) {
+        expenses.push(`・${expense.description}: ${expense.amount.toLocaleString()}円 (${expense.category})`);
+      }
+    }
+
+    const countText = pageIds.length > 1 ? `${pageIds.length}件` : '';
+    const message = [
+      `🗑️ ${countText}このレコードを取り消しますか？`,
+      '',
+      ...expenses,
+      '',
+      '下のボタンを押してください',
+    ].join('\n');
+
+    // 状態を保存
+    setUserState(userId, { action: 'confirmDelete' });
+
+    // 確認ボタンを表示
+    await replyTextWithQuickReply(replyToken, message, [
+      { type: 'action', action: { type: 'message', label: '✅ 取消を確定', text: '取消を確定' } },
+      { type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } },
+    ]);
+  } catch (error) {
+    console.error('Failed to show delete confirmation:', error);
+    await replyText(replyToken, '削除の確認に失敗しました。');
+  }
+}
+
+/**
+ * 削除を実行
+ */
+async function executeDelete(replyToken: string, userId: string): Promise<void> {
+  const pageIds = getUserLastExpense(userId);
+  setUserState(userId, null);
+
+  if (!pageIds || pageIds.length === 0) {
+    await replyText(replyToken, '削除する支出がありません。');
+    return;
+  }
+
+  try {
     for (const pageId of pageIds) {
       await deleteExpense(pageId);
     }
-    setUserLastExpense(userId, []); // 削除後はクリア
+    setUserLastExpense(userId, []);
 
     const countText = pageIds.length > 1 ? `${pageIds.length}件の` : '';
     await replyText(replyToken, `🗑️ ${countText}直近の登録を削除しました`);
@@ -256,14 +351,10 @@ async function handleDeleteCommand(
 }
 
 /**
- * 修正コマンドを処理
- * 書式: 修正 [項目] [値]
- * 例: 修正 カテゴリー 交通費
+ * 修正コマンドを処理（項目選択ボタン表示）
  */
 async function handleModifyCommand(
-  message: string,
   replyToken: string,
-  options: DatabaseOptions,
   userId?: string
 ): Promise<void> {
   if (!userId) {
@@ -277,35 +368,67 @@ async function handleModifyCommand(
     return;
   }
 
-  // コマンドをパース: "修正 項目 値"
-  const parts = message.split(/\s+/);
-  if (parts.length < 3) {
-    await replyText(
-      replyToken,
-      '修正の書式: 修正 [項目] [値]\n\n' +
-        '項目:\n' +
-        '・カテゴリー\n' +
-        '・支出方法\n' +
-        '・金額\n' +
-        '・項目（説明）\n\n' +
-        '例: 修正 カテゴリー 交通費'
-    );
+  try {
+    // 直近の登録情報を取得して表示
+    const expenses: string[] = [];
+    for (const pageId of pageIds) {
+      const expense = await getExpenseById(pageId);
+      if (expense) {
+        expenses.push(`・${expense.description}: ${expense.amount.toLocaleString()}円`);
+        expenses.push(`  📁 ${expense.category} | 💳 ${expense.paymentMethod}`);
+      }
+    }
+
+    const message = [
+      '✏️ 修正する項目を選択してください',
+      '',
+      ...expenses,
+    ].join('\n');
+
+    // 状態を保存
+    setUserState(userId, { action: 'waitingModifyField' });
+
+    // 項目選択ボタンを表示
+    await replyTextWithQuickReply(replyToken, message, [
+      { type: 'action', action: { type: 'message', label: '📁 カテゴリー', text: 'カテゴリー' } },
+      { type: 'action', action: { type: 'message', label: '💳 支出方法', text: '支出方法' } },
+      { type: 'action', action: { type: 'message', label: '💰 金額', text: '金額' } },
+      { type: 'action', action: { type: 'message', label: '📝 支出項目', text: '支出項目' } },
+      { type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } },
+    ]);
+  } catch (error) {
+    console.error('Failed to show modify options:', error);
+    await replyText(replyToken, '修正項目の表示に失敗しました。');
+  }
+}
+
+/**
+ * 修正を実行
+ */
+async function executeModify(
+  replyToken: string,
+  userId: string,
+  field: string,
+  value: string,
+  options: DatabaseOptions
+): Promise<void> {
+  const pageIds = getUserLastExpense(userId);
+  setUserState(userId, null);
+
+  if (!pageIds || pageIds.length === 0) {
+    await replyText(replyToken, '修正する支出がありません。');
     return;
   }
-
-  const field = parts[1];
-  const value = parts.slice(2).join(' ');
 
   try {
     const updates: Partial<ExpenseData> = {};
 
     switch (field) {
       case 'カテゴリー':
-      case 'カテゴリ':
         if (!options.categories.includes(value)) {
           await replyText(
             replyToken,
-            `「${value}」は無効なカテゴリーです。\n\n利用可能: ${options.categories.join('、')}`
+            `「${value}」は無効なカテゴリーです。\n\n利用可能:\n${options.categories.join('、')}`
           );
           return;
         }
@@ -313,11 +436,10 @@ async function handleModifyCommand(
         break;
 
       case '支出方法':
-      case '支払方法':
         if (!options.paymentMethods.includes(value)) {
           await replyText(
             replyToken,
-            `「${value}」は無効な支出方法です。\n\n利用可能: ${options.paymentMethods.join('、')}`
+            `「${value}」は無効な支出方法です。\n\n利用可能:\n${options.paymentMethods.join('、')}`
           );
           return;
         }
@@ -333,16 +455,12 @@ async function handleModifyCommand(
         updates.amount = amount;
         break;
 
-      case '項目':
-      case '説明':
+      case '支出項目':
         updates.description = value;
         break;
 
       default:
-        await replyText(
-          replyToken,
-          `「${field}」は修正できない項目です。\n\n修正可能: カテゴリー、支出方法、金額、項目`
-        );
+        await replyText(replyToken, `「${field}」は修正できない項目です。`);
         return;
     }
 
@@ -397,6 +515,25 @@ async function replyText(replyToken: string, text: string): Promise<void> {
   const message: TextMessage = {
     type: 'text',
     text,
+  };
+  await client.replyMessage({
+    replyToken,
+    messages: [message],
+  });
+}
+
+/**
+ * Quick Reply付きテキストメッセージを返信
+ */
+async function replyTextWithQuickReply(
+  replyToken: string,
+  text: string,
+  items: QuickReply['items']
+): Promise<void> {
+  const message: TextMessage = {
+    type: 'text',
+    text,
+    quickReply: { items },
   };
   await client.replyMessage({
     replyToken,

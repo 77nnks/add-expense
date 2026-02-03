@@ -89,6 +89,8 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
           setUserState(userId, { action: 'waitingModifyValue', field: userMessage });
 
           // カテゴリー・支出方法は選択肢をボタンで表示
+          console.log('[DEBUG] options.categories:', options.categories);
+          console.log('[DEBUG] options.paymentMethods:', options.paymentMethods);
           if (userMessage === 'カテゴリー') {
             const items: QuickReply['items'] = options.categories.slice(0, 12).map((cat) => ({
               type: 'action',

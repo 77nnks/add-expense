@@ -162,6 +162,9 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
   const lastDay = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
   const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
+  console.log('[DEBUG] getMultiMonthTotals - JST Now:', jstNow.toISOString());
+  console.log('[DEBUG] getMultiMonthTotals - Query range:', startDate, 'to', endDate);
+
   // 一度のクエリで全データを取得
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
@@ -174,6 +177,8 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
     },
   });
 
+  console.log('[DEBUG] getMultiMonthTotals - Total records:', response.results.length);
+
   // 月ごとに集計
   const monthlyTotals: Map<string, number> = new Map();
 
@@ -181,6 +186,13 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
     if ('properties' in page) {
       const dateProp = page.properties['日付'];
       const amountProp = page.properties['金額'];
+      const titleProp = page.properties['支出項目'];
+
+      // デバッグ: 各レコードの情報を出力
+      let title = '';
+      if (titleProp && titleProp.type === 'title' && Array.isArray(titleProp.title) && titleProp.title.length > 0) {
+        title = titleProp.title[0].plain_text;
+      }
 
       if (
         dateProp &&
@@ -191,12 +203,17 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
         typeof amountProp.number === 'number'
       ) {
         const dateStr = dateProp.date.start;
+        const amount = amountProp.number;
+        console.log(`[DEBUG] Record: ${title} | Date: ${dateStr} | Amount: ${amount}`);
+
         const monthKey = dateStr.substring(0, 7); // YYYY-MM
         const current = monthlyTotals.get(monthKey) || 0;
-        monthlyTotals.set(monthKey, current + amountProp.number);
+        monthlyTotals.set(monthKey, current + amount);
       }
     }
   }
+
+  console.log('[DEBUG] Monthly totals map:', Object.fromEntries(monthlyTotals));
 
   // 過去N月分の結果を作成（新しい月から順に）
   for (let i = 0; i < months; i++) {
@@ -215,6 +232,7 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
     });
   }
 
+  console.log('[DEBUG] Final results:', results);
   return results;
 }
 
@@ -243,6 +261,9 @@ export async function getCategoryBreakdown(): Promise<{
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
+  console.log('[DEBUG] getCategoryBreakdown - JST Now:', jstNow.toISOString());
+  console.log('[DEBUG] getCategoryBreakdown - Query range:', startOfMonth, 'to', endOfMonth);
+
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
     filter: {
@@ -254,6 +275,8 @@ export async function getCategoryBreakdown(): Promise<{
     },
   });
 
+  console.log('[DEBUG] getCategoryBreakdown - Total records:', response.results.length);
+
   // カテゴリごとに集計
   const categoryTotals: Map<string, number> = new Map();
   let total = 0;
@@ -262,6 +285,13 @@ export async function getCategoryBreakdown(): Promise<{
     if ('properties' in page) {
       const categoryProp = page.properties['カテゴリー'];
       const amountProp = page.properties['金額'];
+      const titleProp = page.properties['支出項目'];
+
+      // デバッグ: 各レコードの情報を出力
+      let title = '';
+      if (titleProp && titleProp.type === 'title' && Array.isArray(titleProp.title) && titleProp.title.length > 0) {
+        title = titleProp.title[0].plain_text;
+      }
 
       if (
         amountProp &&
@@ -282,11 +312,16 @@ export async function getCategoryBreakdown(): Promise<{
           category = categoryProp.select.name;
         }
 
+        console.log(`[DEBUG] Record: ${title} | Category: ${category} | Amount: ${amount}`);
+
         const current = categoryTotals.get(category) || 0;
         categoryTotals.set(category, current + amount);
       }
     }
   }
+
+  console.log('[DEBUG] Category totals map:', Object.fromEntries(categoryTotals));
+  console.log('[DEBUG] Grand total:', total);
 
   // 金額の多い順にソート
   const breakdown: CategoryBreakdown[] = Array.from(categoryTotals.entries())

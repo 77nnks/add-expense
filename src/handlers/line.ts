@@ -3,7 +3,7 @@ import { config } from '../config';
 import { getHelpMessage } from '../utils/messageParser';
 import {
   addExpenseToNotion,
-  getMonthlyTotal,
+  getMultiMonthTotals,
   getDatabaseOptions,
   clearOptionsCache,
   setUserLastExpense,
@@ -78,15 +78,22 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     return;
   }
 
-  // 今月の集計コマンド
+  // 集計コマンド（過去3か月）
   if (userMessage === '集計' || userMessage === '今月') {
     try {
-      const total = await getMonthlyTotal();
-      const now = new Date();
-      await replyText(
-        replyToken,
-        `📊 ${now.getMonth() + 1}月の支出合計\n\n💰 ${total.toLocaleString()}円`
-      );
+      const monthlyTotals = await getMultiMonthTotals(3);
+      const lines = ['📊 支出集計（過去3か月）', ''];
+
+      let grandTotal = 0;
+      for (const mt of monthlyTotals) {
+        lines.push(`${mt.month}月: ${mt.total.toLocaleString()}円`);
+        grandTotal += mt.total;
+      }
+
+      lines.push('');
+      lines.push(`💰 合計: ${grandTotal.toLocaleString()}円`);
+
+      await replyText(replyToken, lines.join('\n'));
     } catch (error) {
       console.error('Failed to get monthly total:', error);
       await replyText(replyToken, '集計の取得に失敗しました');

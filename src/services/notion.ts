@@ -17,8 +17,10 @@ const userLastExpense: Map<string, string[]> = new Map();
  */
 export async function getDatabaseOptions(): Promise<DatabaseOptions> {
   if (cachedOptions) {
+    console.log('[DEBUG] Returning cached options:', JSON.stringify(cachedOptions));
     return cachedOptions;
   }
+  console.log('[DEBUG] No cache, fetching from Notion...');
 
   const response = await notion.databases.retrieve({
     database_id: config.notion.databaseId,

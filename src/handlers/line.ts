@@ -87,11 +87,30 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
         const validFields = ['カテゴリー', '支出方法', '金額', '支出項目'];
         if (validFields.includes(userMessage)) {
           setUserState(userId, { action: 'waitingModifyValue', field: userMessage });
-          await replyTextWithQuickReply(
-            replyToken,
-            `${userMessage}の新しい値を入力してください`,
-            [{ type: 'action', action: { type: 'message', label: 'キャンセル', text: 'キャンセル' } }]
-          );
+
+          // カテゴリー・支出方法は選択肢をボタンで表示
+          if (userMessage === 'カテゴリー') {
+            const items: QuickReply['items'] = options.categories.slice(0, 12).map((cat) => ({
+              type: 'action',
+              action: { type: 'message', label: cat, text: cat },
+            }));
+            items.push({ type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } });
+            await replyTextWithQuickReply(replyToken, '新しいカテゴリーを選択してください', items);
+          } else if (userMessage === '支出方法') {
+            const items: QuickReply['items'] = options.paymentMethods.slice(0, 12).map((pm) => ({
+              type: 'action',
+              action: { type: 'message', label: pm, text: pm },
+            }));
+            items.push({ type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } });
+            await replyTextWithQuickReply(replyToken, '新しい支出方法を選択してください', items);
+          } else {
+            // 金額・支出項目はテキスト入力
+            await replyTextWithQuickReply(
+              replyToken,
+              `${userMessage}の新しい値を入力してください`,
+              [{ type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } }]
+            );
+          }
         } else {
           setUserState(userId, null);
           await replyText(replyToken, '修正をキャンセルしました');

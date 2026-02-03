@@ -50,6 +50,10 @@ async function createRichMenu() {
         action: { type: 'message' as const, text: '取消' },
       },
       {
+        bounds: { x: 833, y: 843, width: 834, height: 843 },
+        action: { type: 'message' as const, text: '内訳' },
+      },
+      {
         bounds: { x: 1667, y: 843, width: 833, height: 843 },
         action: { type: 'message' as const, text: '修正' },
       },

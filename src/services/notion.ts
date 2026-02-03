@@ -219,6 +219,88 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
 }
 
 /**
+ * カテゴリ別集計結果の型
+ */
+export interface CategoryBreakdown {
+  category: string;
+  total: number;
+}
+
+/**
+ * 今月のカテゴリ別支出内訳を取得
+ */
+export async function getCategoryBreakdown(): Promise<{
+  month: number;
+  breakdown: CategoryBreakdown[];
+  total: number;
+}> {
+  const jstNow = getJSTDate();
+  const year = jstNow.getUTCFullYear();
+  const month = jstNow.getUTCMonth();
+
+  // 今月の開始日と終了日
+  const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const response = await notion.databases.query({
+    database_id: config.notion.databaseId,
+    filter: {
+      property: '日付',
+      date: {
+        on_or_after: startOfMonth,
+        on_or_before: endOfMonth,
+      },
+    },
+  });
+
+  // カテゴリごとに集計
+  const categoryTotals: Map<string, number> = new Map();
+  let total = 0;
+
+  for (const page of response.results) {
+    if ('properties' in page) {
+      const categoryProp = page.properties['カテゴリー'];
+      const amountProp = page.properties['金額'];
+
+      if (
+        amountProp &&
+        amountProp.type === 'number' &&
+        typeof amountProp.number === 'number'
+      ) {
+        const amount = amountProp.number;
+        total += amount;
+
+        let category = 'その他';
+        if (
+          categoryProp &&
+          categoryProp.type === 'select' &&
+          categoryProp.select &&
+          'name' in categoryProp.select &&
+          categoryProp.select.name
+        ) {
+          category = categoryProp.select.name;
+        }
+
+        const current = categoryTotals.get(category) || 0;
+        categoryTotals.set(category, current + amount);
+      }
+    }
+  }
+
+  // 金額の多い順にソート
+  const breakdown: CategoryBreakdown[] = Array.from(categoryTotals.entries())
+    .map(([category, categoryTotal]) => ({ category, total: categoryTotal }))
+    .sort((a, b) => b.total - a.total);
+
+  return {
+    month: month + 1,
+    breakdown,
+    total,
+  };
+}
+
+/**
  * ユーザーの直近の登録ページIDを保存
  */
 export function setUserLastExpense(userId: string, pageIds: string[]): void {

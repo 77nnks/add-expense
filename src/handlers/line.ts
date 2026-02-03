@@ -4,6 +4,7 @@ import { getHelpMessage } from '../utils/messageParser';
 import {
   addExpenseToNotion,
   getMultiMonthTotals,
+  getCategoryBreakdown,
   getDatabaseOptions,
   clearOptionsCache,
   setUserLastExpense,
@@ -97,6 +98,31 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     } catch (error) {
       console.error('Failed to get monthly total:', error);
       await replyText(replyToken, '集計の取得に失敗しました');
+    }
+    return;
+  }
+
+  // 内訳コマンド（今月のカテゴリ別集計）
+  if (userMessage === '内訳') {
+    try {
+      const { month, breakdown, total } = await getCategoryBreakdown();
+      const lines = [`📊 ${month}月のカテゴリ別内訳`, ''];
+
+      if (breakdown.length === 0) {
+        lines.push('データがありません');
+      } else {
+        for (const item of breakdown) {
+          const percent = total > 0 ? Math.round((item.total / total) * 100) : 0;
+          lines.push(`${item.category}: ${item.total.toLocaleString()}円 (${percent}%)`);
+        }
+        lines.push('');
+        lines.push(`💰 合計: ${total.toLocaleString()}円`);
+      }
+
+      await replyText(replyToken, lines.join('\n'));
+    } catch (error) {
+      console.error('Failed to get category breakdown:', error);
+      await replyText(replyToken, '内訳の取得に失敗しました');
     }
     return;
   }

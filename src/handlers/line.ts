@@ -92,10 +92,17 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
           console.log('[DEBUG] options.categories:', JSON.stringify(options.categories));
           console.log('[DEBUG] options.paymentMethods:', JSON.stringify(options.paymentMethods));
           if (userMessage === 'カテゴリー') {
-            const categoryItems = options.categories.slice(0, 12).map((cat) => ({
-              type: 'action' as const,
-              action: { type: 'message' as const, label: cat, text: cat },
-            }));
+            const categoryItems = options.categories
+              .filter((cat) => cat && cat.length > 0)
+              .slice(0, 12)
+              .map((cat) => ({
+                type: 'action' as const,
+                action: {
+                  type: 'message' as const,
+                  label: cat.length > 20 ? cat.substring(0, 20) : cat,
+                  text: cat,
+                },
+              }));
             console.log('[DEBUG] categoryItems before cancel:', JSON.stringify(categoryItems));
             const items: QuickReply['items'] = [
               ...categoryItems,
@@ -104,10 +111,17 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
             console.log('[DEBUG] Final items count:', items.length);
             await replyTextWithQuickReply(replyToken, '新しいカテゴリーを選択してください', items);
           } else if (userMessage === '支出方法') {
-            const paymentItems = options.paymentMethods.slice(0, 12).map((pm) => ({
-              type: 'action' as const,
-              action: { type: 'message' as const, label: pm, text: pm },
-            }));
+            const paymentItems = options.paymentMethods
+              .filter((pm) => pm && pm.length > 0)
+              .slice(0, 12)
+              .map((pm) => ({
+                type: 'action' as const,
+                action: {
+                  type: 'message' as const,
+                  label: pm.length > 20 ? pm.substring(0, 20) : pm,
+                  text: pm,
+                },
+              }));
             console.log('[DEBUG] paymentItems before cancel:', JSON.stringify(paymentItems));
             const items: QuickReply['items'] = [
               ...paymentItems,

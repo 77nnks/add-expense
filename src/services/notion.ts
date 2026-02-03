@@ -126,43 +126,96 @@ function getJSTDate(): Date {
  * 今月の支出合計を取得
  */
 export async function getMonthlyTotal(): Promise<number> {
+  const totals = await getMultiMonthTotals(1);
+  return totals[0]?.total || 0;
+}
+
+/**
+ * 月別集計結果の型
+ */
+export interface MonthlyTotal {
+  year: number;
+  month: number;
+  total: number;
+}
+
+/**
+ * 過去N月分の月別支出合計を取得
+ */
+export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTotal[]> {
   const jstNow = getJSTDate();
-  const year = jstNow.getUTCFullYear();
-  const month = jstNow.getUTCMonth();
+  const results: MonthlyTotal[] = [];
 
-  // 今月の開始日と終了日（YYYY-MM-DD形式）
-  const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  // 過去N月分を取得するための日付範囲を計算
+  const currentYear = jstNow.getUTCFullYear();
+  const currentMonth = jstNow.getUTCMonth();
 
-  console.log(`Filtering: ${startOfMonth} to ${endOfMonth}`);
+  // 最も古い月の開始日
+  let oldestYear = currentYear;
+  let oldestMonth = currentMonth - (months - 1);
+  while (oldestMonth < 0) {
+    oldestMonth += 12;
+    oldestYear--;
+  }
 
+  const startDate = `${oldestYear}-${String(oldestMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
+  const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  // 一度のクエリで全データを取得
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
     filter: {
       property: '日付',
       date: {
-        on_or_after: startOfMonth,
-        on_or_before: endOfMonth,
+        on_or_after: startDate,
+        on_or_before: endDate,
       },
     },
   });
 
-  let total = 0;
+  // 月ごとに集計
+  const monthlyTotals: Map<string, number> = new Map();
+
   for (const page of response.results) {
     if ('properties' in page) {
+      const dateProp = page.properties['日付'];
       const amountProp = page.properties['金額'];
+
       if (
+        dateProp &&
+        dateProp.type === 'date' &&
+        dateProp.date?.start &&
         amountProp &&
         amountProp.type === 'number' &&
         typeof amountProp.number === 'number'
       ) {
-        total += amountProp.number;
+        const dateStr = dateProp.date.start;
+        const monthKey = dateStr.substring(0, 7); // YYYY-MM
+        const current = monthlyTotals.get(monthKey) || 0;
+        monthlyTotals.set(monthKey, current + amountProp.number);
       }
     }
   }
 
-  return total;
+  // 過去N月分の結果を作成（新しい月から順に）
+  for (let i = 0; i < months; i++) {
+    let targetYear = currentYear;
+    let targetMonth = currentMonth - i;
+    while (targetMonth < 0) {
+      targetMonth += 12;
+      targetYear--;
+    }
+
+    const monthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
+    results.push({
+      year: targetYear,
+      month: targetMonth + 1,
+      total: monthlyTotals.get(monthKey) || 0,
+    });
+  }
+
+  return results;
 }
 
 /**

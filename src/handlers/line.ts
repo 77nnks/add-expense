@@ -89,21 +89,31 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
           setUserState(userId, { action: 'waitingModifyValue', field: userMessage });
 
           // カテゴリー・支出方法は選択肢をボタンで表示
-          console.log('[DEBUG] options.categories:', options.categories);
-          console.log('[DEBUG] options.paymentMethods:', options.paymentMethods);
+          console.log('[DEBUG] options.categories:', JSON.stringify(options.categories));
+          console.log('[DEBUG] options.paymentMethods:', JSON.stringify(options.paymentMethods));
           if (userMessage === 'カテゴリー') {
-            const items: QuickReply['items'] = options.categories.slice(0, 12).map((cat) => ({
-              type: 'action',
-              action: { type: 'message', label: cat, text: cat },
+            const categoryItems = options.categories.slice(0, 12).map((cat) => ({
+              type: 'action' as const,
+              action: { type: 'message' as const, label: cat, text: cat },
             }));
-            items.push({ type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } });
+            console.log('[DEBUG] categoryItems before cancel:', JSON.stringify(categoryItems));
+            const items: QuickReply['items'] = [
+              ...categoryItems,
+              { type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } },
+            ];
+            console.log('[DEBUG] Final items count:', items.length);
             await replyTextWithQuickReply(replyToken, '新しいカテゴリーを選択してください', items);
           } else if (userMessage === '支出方法') {
-            const items: QuickReply['items'] = options.paymentMethods.slice(0, 12).map((pm) => ({
-              type: 'action',
-              action: { type: 'message', label: pm, text: pm },
+            const paymentItems = options.paymentMethods.slice(0, 12).map((pm) => ({
+              type: 'action' as const,
+              action: { type: 'message' as const, label: pm, text: pm },
             }));
-            items.push({ type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } });
+            console.log('[DEBUG] paymentItems before cancel:', JSON.stringify(paymentItems));
+            const items: QuickReply['items'] = [
+              ...paymentItems,
+              { type: 'action', action: { type: 'message', label: '❌ キャンセル', text: 'キャンセル' } },
+            ];
+            console.log('[DEBUG] Final items count:', items.length);
             await replyTextWithQuickReply(replyToken, '新しい支出方法を選択してください', items);
           } else {
             // 金額・支出項目はテキスト入力

@@ -140,32 +140,49 @@ export interface MonthlyTotal {
 }
 
 /**
- * 過去N月分の月別支出合計を取得
+ * 過去N月分の月別支出合計を取得（月単位で分割してクエリ）
  */
 export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTotal[]> {
   const jstNow = getJSTDate();
   const results: MonthlyTotal[] = [];
 
-  // 過去N月分を取得するための日付範囲を計算
   const currentYear = jstNow.getUTCFullYear();
   const currentMonth = jstNow.getUTCMonth();
 
-  // 最も古い月の開始日
-  let oldestYear = currentYear;
-  let oldestMonth = currentMonth - (months - 1);
-  while (oldestMonth < 0) {
-    oldestMonth += 12;
-    oldestYear--;
+  console.log('[DEBUG] getMultiMonthTotals - JST Now:', jstNow.toISOString());
+  console.log('[DEBUG] Current: year=', currentYear, 'month=', currentMonth + 1);
+
+  // 各月を個別にクエリ
+  for (let i = 0; i < months; i++) {
+    let targetYear = currentYear;
+    let targetMonth = currentMonth - i;
+    while (targetMonth < 0) {
+      targetMonth += 12;
+      targetYear--;
+    }
+
+    const total = await getMonthTotal(targetYear, targetMonth);
+    results.push({
+      year: targetYear,
+      month: targetMonth + 1,
+      total,
+    });
   }
 
-  const startDate = `${oldestYear}-${String(oldestMonth + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
-  const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  console.log('[DEBUG] Final results:', results);
+  return results;
+}
 
-  console.log('[DEBUG] getMultiMonthTotals - JST Now:', jstNow.toISOString());
-  console.log('[DEBUG] getMultiMonthTotals - Query range:', startDate, 'to', endDate);
+/**
+ * 指定した月の支出合計を取得
+ */
+async function getMonthTotal(year: number, month: number): Promise<number> {
+  const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  // 一度のクエリで全データを取得（日付フィルターはANDで結合）
+  console.log(`[DEBUG] getMonthTotal - ${month + 1}月: ${startDate} to ${endDate}`);
+
   const filter = {
     and: [
       {
@@ -183,70 +200,39 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
     ],
   };
 
-  console.log('[DEBUG] Filter:', JSON.stringify(filter, null, 2));
+  let total = 0;
+  let hasMore = true;
+  let startCursor: string | undefined = undefined;
 
-  const response = await notion.databases.query({
-    database_id: config.notion.databaseId,
-    filter,
-  });
-
-  console.log('[DEBUG] getMultiMonthTotals - Total records:', response.results.length);
-
-  // 月ごとに集計
-  const monthlyTotals: Map<string, number> = new Map();
-
-  for (const page of response.results) {
-    if ('properties' in page) {
-      const dateProp = page.properties['日付'];
-      const amountProp = page.properties['金額'];
-      const titleProp = page.properties['支出項目'];
-
-      // デバッグ: 各レコードの情報を出力
-      let title = '';
-      if (titleProp && titleProp.type === 'title' && Array.isArray(titleProp.title) && titleProp.title.length > 0) {
-        title = titleProp.title[0].plain_text;
-      }
-
-      if (
-        dateProp &&
-        dateProp.type === 'date' &&
-        dateProp.date?.start &&
-        amountProp &&
-        amountProp.type === 'number' &&
-        typeof amountProp.number === 'number'
-      ) {
-        const dateStr = dateProp.date.start;
-        const amount = amountProp.number;
-        console.log(`[DEBUG] Record: ${title} | Date: ${dateStr} | Amount: ${amount}`);
-
-        const monthKey = dateStr.substring(0, 7); // YYYY-MM
-        const current = monthlyTotals.get(monthKey) || 0;
-        monthlyTotals.set(monthKey, current + amount);
-      }
-    }
-  }
-
-  console.log('[DEBUG] Monthly totals map:', Object.fromEntries(monthlyTotals));
-
-  // 過去N月分の結果を作成（新しい月から順に）
-  for (let i = 0; i < months; i++) {
-    let targetYear = currentYear;
-    let targetMonth = currentMonth - i;
-    while (targetMonth < 0) {
-      targetMonth += 12;
-      targetYear--;
-    }
-
-    const monthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
-    results.push({
-      year: targetYear,
-      month: targetMonth + 1,
-      total: monthlyTotals.get(monthKey) || 0,
+  // ページネーション対応
+  while (hasMore) {
+    const response = await notion.databases.query({
+      database_id: config.notion.databaseId,
+      filter,
+      start_cursor: startCursor,
     });
+
+    console.log(`[DEBUG] ${month + 1}月 - Records fetched: ${response.results.length}, has_more: ${response.has_more}`);
+
+    for (const page of response.results) {
+      if ('properties' in page) {
+        const amountProp = page.properties['金額'];
+        if (
+          amountProp &&
+          amountProp.type === 'number' &&
+          typeof amountProp.number === 'number'
+        ) {
+          total += amountProp.number;
+        }
+      }
+    }
+
+    hasMore = response.has_more;
+    startCursor = response.next_cursor ?? undefined;
   }
 
-  console.log('[DEBUG] Final results:', results);
-  return results;
+  console.log(`[DEBUG] ${month + 1}月 - Total: ${total}`);
+  return total;
 }
 
 /**
@@ -295,58 +281,58 @@ export async function getCategoryBreakdown(): Promise<{
     ],
   };
 
-  console.log('[DEBUG] Filter:', JSON.stringify(filter, null, 2));
-
-  const response = await notion.databases.query({
-    database_id: config.notion.databaseId,
-    filter,
-  });
-
-  console.log('[DEBUG] getCategoryBreakdown - Total records:', response.results.length);
-
-  // カテゴリごとに集計
+  // カテゴリごとに集計（ページネーション対応）
   const categoryTotals: Map<string, number> = new Map();
   let total = 0;
+  let hasMore = true;
+  let startCursor: string | undefined = undefined;
+  let recordCount = 0;
 
-  for (const page of response.results) {
-    if ('properties' in page) {
-      const categoryProp = page.properties['カテゴリー'];
-      const amountProp = page.properties['金額'];
-      const titleProp = page.properties['支出項目'];
+  while (hasMore) {
+    const response = await notion.databases.query({
+      database_id: config.notion.databaseId,
+      filter,
+      start_cursor: startCursor,
+    });
 
-      // デバッグ: 各レコードの情報を出力
-      let title = '';
-      if (titleProp && titleProp.type === 'title' && Array.isArray(titleProp.title) && titleProp.title.length > 0) {
-        title = titleProp.title[0].plain_text;
-      }
+    recordCount += response.results.length;
+    console.log(`[DEBUG] getCategoryBreakdown - Fetched: ${response.results.length}, has_more: ${response.has_more}`);
 
-      if (
-        amountProp &&
-        amountProp.type === 'number' &&
-        typeof amountProp.number === 'number'
-      ) {
-        const amount = amountProp.number;
-        total += amount;
+    for (const page of response.results) {
+      if ('properties' in page) {
+        const categoryProp = page.properties['カテゴリー'];
+        const amountProp = page.properties['金額'];
 
-        let category = 'その他';
         if (
-          categoryProp &&
-          categoryProp.type === 'select' &&
-          categoryProp.select &&
-          'name' in categoryProp.select &&
-          categoryProp.select.name
+          amountProp &&
+          amountProp.type === 'number' &&
+          typeof amountProp.number === 'number'
         ) {
-          category = categoryProp.select.name;
+          const amount = amountProp.number;
+          total += amount;
+
+          let category = 'その他';
+          if (
+            categoryProp &&
+            categoryProp.type === 'select' &&
+            categoryProp.select &&
+            'name' in categoryProp.select &&
+            categoryProp.select.name
+          ) {
+            category = categoryProp.select.name;
+          }
+
+          const current = categoryTotals.get(category) || 0;
+          categoryTotals.set(category, current + amount);
         }
-
-        console.log(`[DEBUG] Record: ${title} | Category: ${category} | Amount: ${amount}`);
-
-        const current = categoryTotals.get(category) || 0;
-        categoryTotals.set(category, current + amount);
       }
     }
+
+    hasMore = response.has_more;
+    startCursor = response.next_cursor ?? undefined;
   }
 
+  console.log('[DEBUG] getCategoryBreakdown - Total records:', recordCount);
   console.log('[DEBUG] Category totals map:', Object.fromEntries(categoryTotals));
   console.log('[DEBUG] Grand total:', total);
 

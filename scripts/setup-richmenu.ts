@@ -21,16 +21,17 @@ const blobClient = new messagingApi.MessagingApiBlobClient({ channelAccessToken 
 async function createRichMenu() {
   console.log('Creating rich menu...');
 
-  // リッチメニューの定義
+  // リッチメニューの定義（6ボタン2段構成）
   const richMenu = {
     size: {
       width: 2500,
-      height: 843,
+      height: 1686,
     },
     selected: true,
     name: '家計簿メニュー',
     chatBarText: 'メニュー',
     areas: [
+      // 上段
       {
         bounds: { x: 0, y: 0, width: 833, height: 843 },
         action: { type: 'message' as const, text: 'ヘルプ' },
@@ -42,6 +43,15 @@ async function createRichMenu() {
       {
         bounds: { x: 1667, y: 0, width: 833, height: 843 },
         action: { type: 'message' as const, text: '更新' },
+      },
+      // 下段
+      {
+        bounds: { x: 0, y: 843, width: 833, height: 843 },
+        action: { type: 'message' as const, text: '取消' },
+      },
+      {
+        bounds: { x: 1667, y: 843, width: 833, height: 843 },
+        action: { type: 'message' as const, text: '修正' },
       },
     ],
   };

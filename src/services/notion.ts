@@ -411,3 +411,87 @@ export async function deleteExpense(pageId: string): Promise<void> {
     archived: true,
   });
 }
+
+/**
+ * ページIDから支出データを取得
+ */
+export async function getExpenseById(pageId: string): Promise<ExpenseData | null> {
+  try {
+    const page = await notion.pages.retrieve({ page_id: pageId });
+
+    if (!('properties' in page)) {
+      return null;
+    }
+
+    const props = page.properties;
+
+    // 支出項目（タイトル）
+    let description = '';
+    const titleProp = props['支出項目'];
+    if (titleProp && titleProp.type === 'title' && Array.isArray(titleProp.title) && titleProp.title.length > 0) {
+      description = titleProp.title[0].plain_text;
+    }
+
+    // 金額
+    let amount = 0;
+    const amountProp = props['金額'];
+    if (amountProp && amountProp.type === 'number' && typeof amountProp.number === 'number') {
+      amount = amountProp.number;
+    }
+
+    // カテゴリー
+    let category = '';
+    const categoryProp = props['カテゴリー'];
+    if (categoryProp && categoryProp.type === 'select' && categoryProp.select && 'name' in categoryProp.select) {
+      category = categoryProp.select.name || '';
+    }
+
+    // 支出方法
+    let paymentMethod = '';
+    const paymentProp = props['支出方法'];
+    if (paymentProp && paymentProp.type === 'select' && paymentProp.select && 'name' in paymentProp.select) {
+      paymentMethod = paymentProp.select.name || '';
+    }
+
+    // 日付
+    let date = new Date();
+    const dateProp = props['日付'];
+    if (dateProp && dateProp.type === 'date' && dateProp.date?.start) {
+      date = new Date(dateProp.date.start);
+    }
+
+    return { description, amount, category, paymentMethod, date };
+  } catch (error) {
+    console.error('Failed to get expense by ID:', error);
+    return null;
+  }
+}
+
+/**
+ * ユーザーの操作状態
+ */
+export interface UserState {
+  action: 'confirmDelete' | 'waitingModifyField' | 'waitingModifyValue';
+  field?: string; // 修正対象のフィールド
+}
+
+// ユーザーの操作状態を保持
+const userStates: Map<string, UserState> = new Map();
+
+/**
+ * ユーザーの操作状態を設定
+ */
+export function setUserState(userId: string, state: UserState | null): void {
+  if (state === null) {
+    userStates.delete(userId);
+  } else {
+    userStates.set(userId, state);
+  }
+}
+
+/**
+ * ユーザーの操作状態を取得
+ */
+export function getUserState(userId: string): UserState | undefined {
+  return userStates.get(userId);
+}

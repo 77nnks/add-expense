@@ -165,16 +165,29 @@ export async function getMultiMonthTotals(months: number = 3): Promise<MonthlyTo
   console.log('[DEBUG] getMultiMonthTotals - JST Now:', jstNow.toISOString());
   console.log('[DEBUG] getMultiMonthTotals - Query range:', startDate, 'to', endDate);
 
-  // 一度のクエリで全データを取得
+  // 一度のクエリで全データを取得（日付フィルターはANDで結合）
+  const filter = {
+    and: [
+      {
+        property: '日付',
+        date: {
+          on_or_after: startDate,
+        },
+      },
+      {
+        property: '日付',
+        date: {
+          on_or_before: endDate,
+        },
+      },
+    ],
+  };
+
+  console.log('[DEBUG] Filter:', JSON.stringify(filter, null, 2));
+
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
-    filter: {
-      property: '日付',
-      date: {
-        on_or_after: startDate,
-        on_or_before: endDate,
-      },
-    },
+    filter,
   });
 
   console.log('[DEBUG] getMultiMonthTotals - Total records:', response.results.length);
@@ -264,15 +277,29 @@ export async function getCategoryBreakdown(): Promise<{
   console.log('[DEBUG] getCategoryBreakdown - JST Now:', jstNow.toISOString());
   console.log('[DEBUG] getCategoryBreakdown - Query range:', startOfMonth, 'to', endOfMonth);
 
+  // 日付フィルターはANDで結合
+  const filter = {
+    and: [
+      {
+        property: '日付',
+        date: {
+          on_or_after: startOfMonth,
+        },
+      },
+      {
+        property: '日付',
+        date: {
+          on_or_before: endOfMonth,
+        },
+      },
+    ],
+  };
+
+  console.log('[DEBUG] Filter:', JSON.stringify(filter, null, 2));
+
   const response = await notion.databases.query({
     database_id: config.notion.databaseId,
-    filter: {
-      property: '日付',
-      date: {
-        on_or_after: startOfMonth,
-        on_or_before: endOfMonth,
-      },
-    },
+    filter,
   });
 
   console.log('[DEBUG] getCategoryBreakdown - Total records:', response.results.length);

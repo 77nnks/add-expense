@@ -154,7 +154,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
 
   // ヘルプコマンド
   if (userMessage === 'ヘルプ' || userMessage === 'help' || userMessage === '?') {
-    await replyText(replyToken, getHelpMessage(options));
+    await replyTextWithQuickReply(replyToken, getHelpMessage(options), getRichMenuQuickReplyItems());
     return;
   }
 
@@ -163,9 +163,10 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
     clearOptionsCache();
     try {
       const newOptions = await getDatabaseOptions();
-      await replyText(
+      await replyTextWithQuickReply(
         replyToken,
-        `🔄 選択肢を更新しました\n\n📁 カテゴリ:\n${newOptions.categories.join('、')}\n\n💳 支出方法:\n${newOptions.paymentMethods.join('、')}`
+        `🔄 選択肢を更新しました\n\n📁 カテゴリ:\n${newOptions.categories.join('、')}\n\n💳 支出方法:\n${newOptions.paymentMethods.join('、')}`,
+        getRichMenuQuickReplyItems()
       );
     } catch (error) {
       console.error('Failed to reload options:', error);
@@ -189,7 +190,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
       lines.push('');
       lines.push(`💰 合計: ${grandTotal.toLocaleString()}円`);
 
-      await replyText(replyToken, lines.join('\n'));
+      await replyTextWithQuickReply(replyToken, lines.join('\n'), getRichMenuQuickReplyItems());
     } catch (error) {
       console.error('Failed to get monthly total:', error);
       await replyText(replyToken, '集計の取得に失敗しました');
@@ -214,7 +215,7 @@ export async function handleEvent(event: WebhookEvent): Promise<void> {
         lines.push(`💰 合計: ${total.toLocaleString()}円`);
       }
 
-      await replyText(replyToken, lines.join('\n'));
+      await replyTextWithQuickReply(replyToken, lines.join('\n'), getRichMenuQuickReplyItems());
     } catch (error) {
       console.error('Failed to get category breakdown:', error);
       await replyText(replyToken, '内訳の取得に失敗しました');
@@ -311,7 +312,7 @@ async function registerExpenses(
     }
 
     const response = buildResponseMessage(registeredExpenses);
-    await replyText(replyToken, response);
+    await replyTextWithQuickReply(replyToken, response, getRichMenuQuickReplyItems());
   } catch (error) {
     console.error('Failed to add expense to Notion:', error);
     await replyText(replyToken, 'Notionへの登録に失敗しました。設定を確認してください。');
@@ -388,7 +389,11 @@ async function executeDelete(replyToken: string, userId: string): Promise<void> 
     setUserLastExpense(userId, []);
 
     const countText = pageIds.length > 1 ? `${pageIds.length}件の` : '';
-    await replyText(replyToken, `🗑️ ${countText}直近の登録を削除しました`);
+    await replyTextWithQuickReply(
+      replyToken,
+      `🗑️ ${countText}直近の登録を削除しました`,
+      getRichMenuQuickReplyItems()
+    );
   } catch (error) {
     console.error('Failed to delete expense:', error);
     await replyText(replyToken, '削除に失敗しました。');
@@ -515,7 +520,11 @@ async function executeModify(
     }
 
     const countText = pageIds.length > 1 ? `${pageIds.length}件の` : '';
-    await replyText(replyToken, `✏️ ${countText}${field}を「${value}」に修正しました`);
+    await replyTextWithQuickReply(
+      replyToken,
+      `✏️ ${countText}${field}を「${value}」に修正しました`,
+      getRichMenuQuickReplyItems()
+    );
   } catch (error) {
     console.error('Failed to update expense:', error);
     await replyText(replyToken, '修正に失敗しました。');
@@ -551,6 +560,20 @@ function buildResponseMessage(expenses: ExpenseData[]): string {
   lines.push(`💰 合計: ${total.toLocaleString()}円`);
 
   return lines.join('\n');
+}
+
+/**
+ * リッチメニューのQuick Replyアイテムを取得
+ */
+function getRichMenuQuickReplyItems(): QuickReply['items'] {
+  return [
+    { type: 'action', action: { type: 'message', label: '❓ ヘルプ', text: 'ヘルプ' } },
+    { type: 'action', action: { type: 'message', label: '📊 集計', text: '集計' } },
+    { type: 'action', action: { type: 'message', label: '🔄 更新', text: '更新' } },
+    { type: 'action', action: { type: 'message', label: '🗑️ 取消', text: '取消' } },
+    { type: 'action', action: { type: 'message', label: '📋 内訳', text: '内訳' } },
+    { type: 'action', action: { type: 'message', label: '✏️ 修正', text: '修正' } },
+  ];
 }
 
 /**
